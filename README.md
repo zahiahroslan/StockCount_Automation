@@ -1,1 +1,0 @@
-This project is designed to compare the quantities of materials counted during the annual stock count with the values recorded in SAP. It uses Google Apps Script to integrate with Google Sheets, allowing for efficient comparison and analysis of stock data.
