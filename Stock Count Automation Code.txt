@@ -1,0 +1,164 @@
+function count_and_match() {
+  // get data from spreadsheet and assign to s
+  s = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet().getDataRange().getDisplayValues();
+  main_id = s[1][1];
+  main_tab = s[2][1];
+  count_id = s[5][1];
+  count_tab = s[6][1];
+}
+
+function compare_counter_sap(main_id, main_tab, count_id, count_tab) {
+
+  var mainSheet = SpreadsheetApp.openById(main_id).getSheetByName(main_tab);
+  var mainRange = mainSheet.getRange("A5:O");
+  mainData = mainRange.getDisplayValues();
+  var insertData = JSON.parse(JSON.stringify(mainData));
+
+  console.log("now insertData", insertData[0]);
+  console.log("now mainData", mainData[0]);
+  //insertData[0][0] = 3;
+  console.log("now insertData", insertData[0]);
+  console.log("now mainData", mainData[0]);
+  //return;
+
+  var countSheet = SpreadsheetApp.openById(count_id).getSheetByName(count_tab);
+  var lastRow = countSheet.getLastRow();
+  var lastColumn = countSheet.getLastColumn();
+  var countDataRange = countSheet.getRange(1, 1, lastRow, lastColumn);
+  var countData = countDataRange.getDisplayValues();
+  var unmatchedData = [];
+
+  console.log("total of countData:", countData.length);
+  console.log("total of mainData:", mainData.length);
+
+  // Assuming material numbers are in the second column (index 1) of both countData and mainData
+  var countMaterialNumbers = countData.map(row => row[1]);
+  var mainMaterialNumbers = mainData.map(row => row[1]);
+
+  // Find common material numbers between countData and mainData
+  var commonMaterialNumbers = countMaterialNumbers.filter(number => mainMaterialNumbers.includes(number));
+
+  // Iterate through common material numbers
+  commonMaterialNumbers.forEach(materialNumber => {
+    var countRowIndex = countMaterialNumbers.indexOf(materialNumber);
+    var mainRowIndex = mainMaterialNumbers.indexOf(materialNumber);
+
+    console.log("Material number now:", materialNumber);
+    console.log("Material Number Match Found!");
+
+    // Assuming qttyValue is in the fifth column (index 5) of countData
+    var qttyValue = countData[countRowIndex][5];
+    console.log("Quantity Value:", qttyValue);
+
+    // Update insertData with qttyValue
+    if (mainData[mainRowIndex].length > 10) {
+      if (mainData[mainRowIndex][10] === undefined || mainData[mainRowIndex][10] === null || mainData[mainRowIndex][10] === "") {
+        insertData[mainRowIndex][10] = qttyValue;
+        console.log("now inserting Data into index 10", insertData[mainRowIndex]);
+      }
+      else if (mainData[mainRowIndex].length > 11) {
+        if (mainData[mainRowIndex][11] === undefined || mainData[mainRowIndex][11] === null || mainData[mainRowIndex][11] === "") {
+          insertData[mainRowIndex][11] = qttyValue;
+          console.log("now inserting Data into index 11", insertData[mainRowIndex]);
+        } else if (mainData[mainRowIndex].length > 12) {
+          if (mainData[mainRowIndex][12] === undefined || mainData[mainRowIndex][12] === null || mainData[mainRowIndex][12] === "") {
+            insertData[mainRowIndex][12] = qttyValue;
+            console.log("now inserting Data into index 12", insertData[mainRowIndex]);
+          } else {
+            // Index 12 is already filled, update the existing value
+            mainData[mainRowIndex][12] = qttyValue;
+            console.log("Quantity value updated in index 12", mainData[mainRowIndex]);
+            insertData[mainRowIndex][12] = qttyValue; // Update insertData as well if needed
+          }
+        }
+      }
+    }
+
+    var sapValue = mainData[mainRowIndex][14]; // SAP is in the 15th column in sheet
+    console.log("Sap Value:", sapValue);
+
+    //var qttyValueNum = parseFloat(qttyValue.trim());
+    //var sapValueNum = parseFloat(sapValue.trim());
+
+    if (qttyValue.trim() === sapValue.trim()) {
+      console.log("Match value of Quantity and SAP found!");
+    }
+    else {
+      console.log("Unmatched value of Quantity and Sap found!");
+      console.log(qttyValue, sapValue);
+      unmatchedData.push(countData[countRowIndex]);
+    }
+  });
+
+  if (unmatchedData.length > 0) {
+    var count_tab_number = parseInt(count_tab.match(/\d+$/)[0]);
+    var new_sheet_number = count_tab_number + 1;
+    var new_sheet_name = count_tab.replace(/\d+$/, new_sheet_number);
+    var unmatchedSheet = SpreadsheetApp.openById(count_id).insertSheet(new_sheet_name);
+    console.log("New Counter Sheet created!");
+    SpreadsheetApp.getActiveSpreadsheet().toast("Unmatched Data! NEW SHEET CREATED", "UNMATCHED DATA", 10);
+
+    // Headers for unmatched sheet
+    var headerValues = ["NO", "MATERIAL NUMBER", "DESCRIPTION", "BIN LOCATION", "UOM", "QUANTITY"];
+    var headerRange = unmatchedSheet.getRange(1, 1, 1, headerValues.length);
+    headerRange.setValues([headerValues]);
+
+    // Remove "QUANTITY" from each row of unmatchedData
+    var unmatchedDataWithoutQuantity = unmatchedData.map(row => {
+      // Copy all values except the quantity value (index 5)
+      return [row[0], row[1], row[2], row[3], row[4], ""];
+    });
+
+    // Insert data into unmatched sheet starting from the second row (after the header)
+    var newRange = unmatchedSheet.getRange(2, 1, unmatchedDataWithoutQuantity.length, unmatchedDataWithoutQuantity[0].length);
+    newRange.setValues(unmatchedDataWithoutQuantity);
+    var borderRange = unmatchedSheet.getDataRange();
+    borderRange.setBorder(true, true, true, true, true, true);
+
+  }
+  else {
+    console.log("All Data Matched! NO NEW SHEET CREATED");
+    SpreadsheetApp.getActiveSpreadsheet().toast("All Data Matched! NO NEW SHEET CREATED", "MATCHED DATA", 10);
+
+  }
+  if (countMaterialNumbers.length == 0) {
+    return;
+  }
+
+  // Update the main sheet with insertData
+  mainRange.setValues(insertData);
+
+
+  // Protect the tab
+  protect_tab(count_id, count_tab);
+}
+
+
+//to freeze previous tab
+function protect_tab(count_id, count_tab) {
+  var countSheet = SpreadsheetApp.openById(count_id).getSheetByName(count_tab);
+
+  // Protect the entire sheet
+  var protection = countSheet.protect().setDescription('Protected!');
+
+  // Remove all editors except the owner
+  var ownerEmail = SpreadsheetApp.openById(count_id).getOwner();
+  var editors = protection.getEditors();
+  for (var i = 0; i < editors.length; i++) {
+    if (editors[i] !== ownerEmail) {
+      protection.removeEditor(editors[i]);
+    }
+  }
+
+  console.log("Tab has been protected! Only the owner can edit it.");
+  SpreadsheetApp.getActiveSpreadsheet().toast(count_tab + " is PROTECTED! Only the owner can edit this tab.", "PROTECTED TAB", 10);
+}
+
+
+let counter = 0;
+for (let c = 0; c <= 3; c++) {
+  count_and_match();
+  counter++;
+  compare_counter_sap(main_id, main_tab, count_id, count_tab);
+  break;
+}
